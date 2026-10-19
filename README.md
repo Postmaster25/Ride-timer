@@ -20,7 +20,7 @@ The cue log shows how late each cue was. "sent, not heard" means the voice never
 
 - `index.html`, `app.js`: the page.
 - `cues.js`: the test workouts and the cue rules.
-- `clips/`: recorded cue clips and `manifest.json`. Regenerate with `node tools/make-clips.mjs` (needs `espeak-ng` and `ffmpeg`).
+- `clips/`: recorded cue clips and `manifest.json`. Spoken by the Piper "Ryan" voice (licensed CC BY-NC-SA 4.0, personal non-commercial use). Regenerate with `node tools/make-clips.mjs`; the script header says how to get the voice.
 - `media/`: the keep-alive audio loop and the wake-lock fallback video.
 
 ## Hosting
