@@ -2,6 +2,9 @@
 // work on the iPhone with the screen locked and the silent switch on; built-in
 // speech does not, so it is only a fallback for phrases with no clip.
 
+// Pause between chained phrases so "250", "to", "260 watts" don't run together.
+const GAP = 0.14;
+
 export class Voice {
   ctx = null;
   buffers = new Map();
@@ -76,9 +79,9 @@ export class Voice {
         src.start(cursor);
         nodes.push(src);
         this.sources.push(src);
-        cursor += src.buffer.duration;
+        cursor += src.buffer.duration + GAP;
       }
-      prev = { end: cursor, countdown: item.countdown, nodes };
+      prev = { end: cursor - GAP, countdown: item.countdown, nodes };
     }
     return missing;
   }

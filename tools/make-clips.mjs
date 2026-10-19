@@ -13,8 +13,12 @@ const model = process.env.PIPER_MODEL;
 if (!model) throw new Error('Set PIPER_MODEL to the path of en-us-ryan-high.onnx');
 const tmp = mkdtempSync(join(tmpdir(), 'clips-'));
 const phrases = vocabulary();
+// Countdown digits are spoken as words in full sentences ("Five."), which
+// keeps them in the same voice and tone as the longer cues.
+const WORDS = { '5.': 'Five.', '4.': 'Four.', '3.': 'Three.', '2.': 'Two.', '1.': 'One.' };
 const jobs = phrases.map(text => [text, join(tmp, clipName(text).replace('.mp3', '.wav'))]);
-execFileSync('python3', ['tools/synth.py', model], { input: JSON.stringify(jobs), stdio: ['pipe', 'inherit', 'inherit'] });
+const spoken = jobs.map(([text, wav]) => [WORDS[text] || text, wav]);
+execFileSync('python3', ['tools/synth.py', model], { input: JSON.stringify(spoken), stdio: ['pipe', 'inherit', 'inherit'] });
 
 const dir = 'clips';
 rmSync(dir, { recursive: true, force: true });

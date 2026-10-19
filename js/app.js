@@ -377,9 +377,9 @@ function renderSettings() {
     <section class="card">
       <h2>Plan</h2>
       <p class="muted">${p ? `${esc(p.planName || 'Untitled plan')}, version ${esc(p.version)}, ${p.weeks.length} weeks, ${allRides(p).length} rides.` : 'No plan loaded.'}</p>
-      <label class="field">Import plan JSON
-        <input type="file" id="sFile" accept=".json,application/json">
-        <textarea id="sJson" placeholder="…or paste the plan JSON here"></textarea></label>
+      <div class="field">Import plan JSON
+        <label class="filepick secondary">Choose a .json file<input type="file" id="sFile" accept=".json,application/json,text/plain"></label>
+        <textarea id="sJson" placeholder="…or paste the plan JSON here" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea></div>
       <button id="sCheck">Check plan</button>
       <div id="sResult"></div>
     </section>
@@ -399,32 +399,51 @@ function renderSettings() {
   };
   $('#sFile').onchange = async e => {
     const f = e.target.files[0];
-    if (f) { $('#sJson').value = await f.text(); checkPlan(); }
+    if (!f) return;
+    try { $('#sJson').value = await f.text(); } catch (err) { $('#sResult').innerHTML = `<div class="errors"><b>That file couldn't be read.</b><p>${esc(err.message)}</p></div>`; return; }
+    checkPlan();
   };
   $('#sCheck').onclick = checkPlan;
 }
 
 function checkPlan() {
   const out = $('#sResult');
+  // Close the keyboard and bring the result into view; on a phone it would
+  // otherwise land below the keyboard and the button seems to do nothing.
+  document.activeElement?.blur?.();
+  const show = html => {
+    out.innerHTML = html;
+    requestAnimationFrame(() => out.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
   pendingPlan = null;
-  let plan;
-  try { plan = JSON.parse($('#sJson').value); } catch (e) {
-    out.innerHTML = `<div class="errors"><b>That isn't valid JSON.</b><p>${esc(e.message)}</p></div>`;
+  // iOS "smart punctuation" can turn pasted quotes into curly ones.
+  const text = $('#sJson').value.replace(/[\u201C\u201D\u201E\u201F]/g, '"').replace(/[\u2018\u2019]/g, "'").trim();
+  if (!text) {
+    show(`<div class="errors"><b>Paste the plan JSON or choose a file first.</b></div>`);
     return;
   }
-  const { errors, stats } = validatePlan(plan);
+  let plan;
+  try { plan = JSON.parse(text); } catch (e) {
+    show(`<div class="errors"><b>That isn't valid JSON.</b><p>${esc(e.message)}</p></div>`);
+    return;
+  }
+  let errors, stats;
+  try { ({ errors, stats } = validatePlan(plan)); } catch (e) {
+    show(`<div class="errors"><b>The plan couldn't be checked.</b><p>${esc(e.message)}</p></div>`);
+    return;
+  }
   if (errors.length) {
-    out.innerHTML = `<div class="errors"><b>${errors.length} problem${errors.length === 1 ? '' : 's'} found. Your current plan was not changed.</b>
-      <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul></div>`;
+    show(`<div class="errors"><b>${errors.length} problem${errors.length === 1 ? '' : 's'} found. Your current plan was not changed.</b>
+      <ul>${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul></div>`);
     return;
   }
   pendingPlan = plan;
   const titles = new Set(allRides(plan).map(r => r.day.title));
   const keptSkips = Object.keys(state.skips).filter(t => titles.has(t)).length;
-  out.innerHTML = `<div class="preview"><b>${esc(stats.name)}</b>
+  show(`<div class="preview"><b>${esc(stats.name)}</b>
     <p>Version ${esc(stats.version)} · ${stats.weeks} weeks · ${stats.rides} rides</p>
     ${state.plan ? `<p class="muted">Replaces the current plan. Start date stays. ${keptSkips} skip mark${keptSkips === 1 ? '' : 's'} kept.</p>` : ''}
-    <button id="sConfirm">Import this plan</button></div>`;
+    <button id="sConfirm">Import this plan</button></div>`);
   $('#sConfirm').onclick = () => {
     const titles2 = new Set(allRides(pendingPlan).map(r => r.day.title));
     state.plan = pendingPlan;
@@ -432,10 +451,9 @@ function checkPlan() {
     const ok = save('plan');
     save('skips');
     pendingPlan = null;
-    out.innerHTML = ok ? `<div class="preview"><b>Plan imported.</b></div>` : `<div class="errors"><b>The plan could not be saved on this device.</b></div>`;
-    $('#sJson').value = '';
     renderSettings();
-    if (ok) $('#sResult').innerHTML = `<div class="preview"><b>Plan imported.</b> <a href="#/">See this week</a></div>`;
+    $('#sResult').innerHTML = ok ? `<div class="preview"><b>Plan imported.</b> <a href="#/">See this week</a></div>` : `<div class="errors"><b>The plan could not be saved on this device.</b></div>`;
+    $('#sResult').scrollIntoView({ block: 'start' });
   };
 }
 

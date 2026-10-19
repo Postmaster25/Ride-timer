@@ -132,6 +132,10 @@ export function vocabulary() {
   return [...v];
 }
 
+export const COUNTDOWN = ['5.', '4.', '3.', '2.', '1.'];
+
 export function clipName(text) {
+  // Countdown digits are recorded as words ("Five."), apart from bare numbers.
+  if (COUNTDOWN.includes(text)) return `count-${text[0]}.mp3`;
   return (text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'x') + '.mp3';
 }
