@@ -34,4 +34,6 @@ Tested on an iPhone with iOS 18.7 in Safari, not opened from the home screen, wi
 - **Recorded clips:** all six checks passed, including the locked screen, the silent switch and the pocket test.
 - **Built-in speech:** failed with the silent switch on, even with the audio session set to playback. In one run it also missed 6 cues.
 
+- **Home screen:** opened from a home screen icon, recorded clips ran with no missed cues, and the screen wake worked.
+
 Phase 2 will use recorded clips, so every phrase it speaks needs a clip. Numbers (watts, durations, reps) get clips of their own, and the app joins them together.
