@@ -32,6 +32,8 @@ export function validatePlan(plan) {
       const dLabel = `${wLabel}, ${isInt(day?.weekday) && day.weekday >= 1 && day.weekday <= 7 ? WEEKDAYS[day.weekday - 1] : `day entry ${di + 1}`}`;
       if (!isInt(day?.weekday) || day.weekday < 1 || day.weekday > 7) errors.push(`${dLabel}: "weekday" must be 1 (Monday) to 7 (Sunday).`);
       if (!DAY_KINDS.includes(day?.kind)) { errors.push(`${dLabel}: "kind" must be one of ${DAY_KINDS.join(', ')}.`); return; }
+      if (day.minutes != null && (!isInt(day.minutes) || day.minutes < 0)) errors.push(`${dLabel}: "minutes" must be a whole number of 0 or more.`);
+      if (day.optional != null && typeof day.optional !== 'boolean') errors.push(`${dLabel}: "optional" must be true or false.`);
       if (day.kind !== 'ride') return;
       rides++;
       const rLabel = `${dLabel} (${day.title || 'untitled ride'})`;
@@ -59,7 +61,63 @@ export function validatePlan(plan) {
       });
     });
   });
+  if (plan.stages != null) validateStages(plan.stages, Math.max(0, ...weekNums), errors);
   return { errors, stats: { name: plan.planName || 'Untitled plan', version: plan.version, weeks: weekNums.size, rides } };
+}
+
+// Stages start at week 1 and cover every week in order, with no gaps or overlaps.
+function validateStages(stages, last, errors) {
+  if (!Array.isArray(stages)) { errors.push('Plan: "stages" must be a list.'); return; }
+  let next = 1;
+  stages.forEach((st, i) => {
+    const label = `Stage ${i + 1}${st?.name ? ` (${st.name})` : ''}`;
+    if (!st?.name || typeof st.name !== 'string') errors.push(`${label}: "name" is missing.`);
+    if (!isInt(st?.startWeek) || !isInt(st?.endWeek) || st.endWeek < st.startWeek) {
+      errors.push(`${label}: "startWeek" and "endWeek" must be whole numbers, with endWeek not before startWeek.`);
+      return;
+    }
+    if (st.startWeek !== next) errors.push(`${label}: starts at week ${st.startWeek} but week ${next} was expected.`);
+    next = st.endWeek + 1;
+    if (st.days != null && (typeof st.days !== 'object' || Array.isArray(st.days))) errors.push(`${label}: "days" must map "1" to "7" to short texts.`);
+  });
+  if (stages.length && next - 1 !== last) errors.push(`Stages: they end at week ${next - 1} but the plan runs to week ${last}.`);
+}
+
+// ---------- hours (Overview) ----------
+// Volt days count as 60 minutes; rest and free days count as nothing; a day
+// with no "minutes" (plans saved before the field existed) counts as 0.
+export function dayMinutes(day) {
+  if (day.kind === 'rest' || day.kind === 'free') return 0;
+  if (day.kind === 'strength') return 60;
+  return isNum(day.minutes) ? day.minutes : 0;
+}
+const counted = day => day.kind !== 'rest' && day.kind !== 'free' && !day.optional;
+
+export function weekMinutes(plan, week) {
+  const wk = plan.weeks.find(w => w.week === week);
+  return (wk?.days || []).filter(counted).reduce((a, d) => a + dayMinutes(d), 0);
+}
+
+// Average weekly hours over a stage's weeks, with the lowest and highest week.
+export function stageHours(plan, stage) {
+  const hours = [];
+  for (let w = stage.startWeek; w <= stage.endWeek; w++) hours.push(weekMinutes(plan, w) / 60);
+  if (!hours.length) return { avg: 0, min: 0, max: 0 };
+  return { avg: hours.reduce((a, h) => a + h, 0) / hours.length, min: Math.min(...hours), max: Math.max(...hours) };
+}
+
+// Activity counts and minutes for the whole plan, skipping optional days.
+export function planTotals(plan) {
+  const byKind = { ride: { count: 0, minutes: 0 }, run: { count: 0, minutes: 0 }, strength: { count: 0, minutes: 0 } };
+  let count = 0, minutes = 0;
+  for (const wk of plan?.weeks || []) for (const day of wk.days) {
+    if (!counted(day)) continue;
+    const m = dayMinutes(day);
+    count++;
+    minutes += m;
+    if (byKind[day.kind]) { byKind[day.kind].count++; byKind[day.kind].minutes += m; }
+  }
+  return { count, minutes, byKind };
 }
 
 export const round5 = w => Math.round(w / 5) * 5;

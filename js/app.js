@@ -1,6 +1,6 @@
 import {
   validatePlan, scaledStep, findRide, allRides, lastWeek, calendar, toYMD, addDays, mondayOf, WEEKDAYS,
-  description, shortDuration, wattsLabel, hrLabel, cadenceLabel, totalSeconds,
+  description, shortDuration, wattsLabel, hrLabel, cadenceLabel, totalSeconds, stageHours, planTotals,
 } from './plan.js';
 import { buildCues, resumeSegs, durSegs } from './cues.js';
 import { Voice, Wake } from './audio.js';
@@ -77,6 +77,7 @@ function route() {
   if (page === 'ride') return renderRide(decodeURIComponent(arg || ''));
   if (page === 'timer') return run ? renderTimer() : go('#/');
   if (page === 'settings') return renderSettings();
+  if (page === 'overview') return renderOverview();
   return renderWeek(arg ? parseInt(arg, 10) : null);
 }
 
@@ -146,6 +147,52 @@ function toggleSkip(title) {
   else state.skips[title] = true;
   save('skips');
   route();
+}
+
+// ---------- overview ----------
+const hrs = min => (min / 60).toFixed(1);
+
+function renderOverview() {
+  const plan = state.plan;
+  if (!plan) {
+    view.innerHTML = `<section class="card empty">
+      <h2>No plan loaded yet</h2>
+      <p>Import the plan JSON in Settings to see the overview.</p>
+      <button data-go="#/settings">Open Settings</button></section>`;
+    return;
+  }
+  const t = planTotals(plan);
+  const metric = (label, value, sub = '') => `<div class="metric"><span>${label}</span><b>${value}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  const kindCard = (label, k) => metric(label, t.byKind[k].count, `${hrs(t.byKind[k].minutes)} h`);
+  const cards = `<div class="metrics">
+    ${metric('Total Activities', t.count)}${metric('Total Hours', hrs(t.minutes))}
+    ${kindCard('Bike', 'ride')}${kindCard('Run', 'run')}${kindCard('Weight Training', 'strength')}</div>`;
+
+  const stages = Array.isArray(plan.stages) ? plan.stages : [];
+  if (!stages.length) {
+    view.innerHTML = `${cards}<section class="card empty"><p>This plan has no stage overview.</p></section>`;
+    return;
+  }
+  const cal = calendar(state.startDate);
+  const now = today();
+  const started = cal && cal.daysUntilStart(now) <= 0;
+  const curWeek = started ? cal.weekOf(now) : null;
+  const todayWd = started && curWeek <= lastWeek(plan) ? (now.getDay() + 6) % 7 + 1 : null;
+
+  const head = `<tr><th class="stage">Stage</th><th class="hours">Hours per week</th>
+    ${WEEKDAYS.map((d, i) => `<th class="${todayWd === i + 1 ? 'today' : ''}">${d}</th>`).join('')}</tr>`;
+  const rows = stages.map(st => {
+    const h = stageHours(plan, st);
+    const cur = curWeek != null && curWeek >= st.startWeek && curWeek <= st.endWeek;
+    const weeks = st.startWeek === st.endWeek ? `Week ${st.startWeek}` : `Weeks ${st.startWeek} to ${st.endWeek}`;
+    const nb = d => fmtDate(d).replace(/ /g, '\u00a0');
+    const dates = cal ? `<small>${nb(cal.dateOf(st.startWeek, 1))} - ${nb(cal.dateOf(st.endWeek, 7))}</small>` : '';
+    const cells = [1, 2, 3, 4, 5, 6, 7].map(wd => `<td>${esc(st.days?.[wd] ?? st.days?.[String(wd)] ?? '')}</td>`).join('');
+    return `<tr class="${cur ? 'current' : ''}">
+      <th class="stage"><a href="#/week/${st.startWeek}"><b>${esc(st.name)}</b><small>${weeks}</small>${dates}</a></th>
+      <td class="hours"><b>${h.avg.toFixed(1)} h</b><small>${h.min.toFixed(1)} to ${h.max.toFixed(1)}</small></td>${cells}</tr>`;
+  }).join('');
+  view.innerHTML = `${cards}<div class="matrix"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
 }
 
 // ---------- workout view ----------

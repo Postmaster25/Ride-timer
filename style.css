@@ -52,6 +52,35 @@ button.icon { width: 52px; height: 52px; font-size: 30px; line-height: 1; paddin
 .item.skipped .title { text-decoration: line-through; }
 .skip { flex: none; padding: 6px 10px; font-size: 14px; background: #2a2a2a; color: var(--text); }
 
+/* overview */
+body[data-page="overview"] main, body[data-page="overview"] .top { max-width: 1240px; }
+.metrics { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.metric { flex: 1 1 100px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+  display: flex; flex-direction: column; }
+.metric span { color: var(--muted); font-size: 13px; font-weight: 600; }
+.metric b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.metric small { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.matrix { overflow: auto; max-height: calc(100vh - 230px); max-height: calc(100dvh - 230px); border: 1px solid var(--line); border-radius: 12px; }
+.matrix table { border-collapse: separate; border-spacing: 0; font-size: 14px; line-height: 1.3; }
+.matrix th, .matrix td { text-align: left; vertical-align: top; padding: 8px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.matrix td { min-width: 128px; }
+.matrix thead th { position: sticky; top: 0; z-index: 2; background: #1e1e1e; color: var(--muted); font-size: 13px; }
+.matrix thead th.today { color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
+.matrix th.stage { position: sticky; left: 0; z-index: 1; width: 104px; min-width: 104px; max-width: 104px; border-right: 1px solid #444; }
+.matrix thead th.stage { z-index: 3; }
+.matrix th.stage a { color: var(--text); text-decoration: none; display: flex; flex-direction: column; }
+.matrix th.stage small, .matrix td.hours small { color: var(--muted); font-size: 12px; font-weight: 400; }
+.matrix td.hours, .matrix th.hours { min-width: 64px; width: 64px; }
+.matrix td.hours { display: table-cell; font-variant-numeric: tabular-nums; }
+.matrix td.hours b, .matrix td.hours small { display: block; white-space: nowrap; }
+.matrix tr.current th, .matrix tr.current td { background: #1c1a10; }
+.matrix tr.current th.stage { box-shadow: inset 4px 0 0 var(--accent); }
+@media (min-width: 900px) {
+  .matrix td { min-width: 0; }
+  .matrix table { width: 100%; }
+  .matrix th.stage { width: 150px; min-width: 150px; max-width: 150px; }
+}
+
 /* workout */
 .back { display: inline-block; margin: 4px 0 12px; text-decoration: none; font-weight: 600; }
 .copyrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 14px 0 10px; }

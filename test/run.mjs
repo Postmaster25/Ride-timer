@@ -1,6 +1,6 @@
 // Run with: node test/run.mjs
 import assert from 'node:assert/strict';
-import { validatePlan, description, scaledStep, calendar, toYMD, scaleWatts } from '../js/plan.js';
+import { validatePlan, description, scaledStep, calendar, toYMD, scaleWatts, planTotals, stageHours } from '../js/plan.js';
 import { buildCues, vocabulary } from '../js/cues.js';
 import { SAMPLE } from './sample-plan.mjs';
 
@@ -113,6 +113,39 @@ test('every cue phrase in the spec example has a clip', () => {
   const vocab = new Set(vocabulary());
   const steps = SAMPLE.weeks[0].days[1].steps.map(s => scaledStep(s, SAMPLE, 235));
   for (const c of buildCues(steps, 'SS')) for (const seg of c.segments) assert.ok(vocab.has(seg), seg);
+});
+
+test('minutes and optional: validated, optional days and missing minutes skipped in totals', () => {
+  const p = structuredClone(SAMPLE);
+  const { days } = p.weeks[0];
+  days[0].minutes = 45; // Volt counts as 60 whatever it says
+  days.push({ weekday: 2, kind: 'run', summary: 'Easy run', minutes: 30 });
+  days.push({ weekday: 5, kind: 'run', summary: 'Optional short run', minutes: 20, optional: true });
+  days.push({ weekday: 7, kind: 'rest', summary: 'Rest' });
+  assert.deepEqual(validatePlan(p).errors, []);
+  // The ride has no "minutes" (a plan saved before the field existed): 0.
+  const t = planTotals(p);
+  assert.equal(t.count, 3);
+  assert.equal(t.minutes, 90);
+  assert.deepEqual(t.byKind.run, { count: 1, minutes: 30 });
+  assert.deepEqual(t.byKind.strength, { count: 1, minutes: 60 });
+  days[1].minutes = 75;
+  assert.deepEqual(stageHours(p, { startWeek: 5, endWeek: 6 }), { avg: 1.375, min: 0, max: 2.75 });
+  days[1].minutes = -5;
+  days[2].optional = 'yes';
+  const { errors } = validatePlan(p);
+  assert.ok(errors.some(e => e.startsWith('Week 5, Wed: "minutes"')), errors.join('\n'));
+  assert.ok(errors.some(e => e.startsWith('Week 5, Tue: "optional"')), errors.join('\n'));
+});
+
+test('stages must start at week 1 and cover every week in order', () => {
+  const p = structuredClone(SAMPLE);
+  p.stages = [{ name: 'A', startWeek: 1, endWeek: 3, days: {} }, { name: 'B', startWeek: 4, endWeek: 5, days: {} }];
+  assert.deepEqual(validatePlan(p).errors, []);
+  p.stages[1].startWeek = 5;
+  assert.ok(validatePlan(p).errors.some(e => e.includes('week 4 was expected')));
+  p.stages = [{ name: 'A', startWeek: 1, endWeek: 3, days: {} }];
+  assert.ok(validatePlan(p).errors.some(e => e.includes('plan runs to week 5')));
 });
 
 let failed = 0;
