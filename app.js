@@ -58,7 +58,6 @@ class ClipEngine {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) throw new Error('Web Audio is not available');
     if (!this.ctx) {
-      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* ignore */ }
       this.ctx = new AC();
       // A silent tone keeps the audio graph running between cues.
       const osc = this.ctx.createOscillator();
@@ -190,6 +189,8 @@ async function start() {
   const workout = WORKOUTS.find(w => w.id === $('workout').value);
   const engine = engines[$('engine').value];
   // Everything that needs the tap's user gesture happens before any await.
+  // 'playback' asks iOS to ignore the silent switch, like a music app.
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* ignore */ }
   if ($('keepAlive').checked) $('keepAliveAudio').play().catch(e => log(0, 'Background audio blocked', e.name, true));
   if ($('keepAwake').checked) wake.on();
   $('start').disabled = true;
@@ -206,7 +207,7 @@ async function start() {
   run = {
     workout, engine, steps: timeline(workout), cues: buildCues(workout), total: totalSeconds(workout),
     startedAt: Date.now(), pausedAt: null, pausedTotal: 0, next: 0, done: false,
-    stats: { maxLate: 0, missed: 0, stalls: 0, engine: $('engine').value, workout: workout.name },
+    stats: { maxLate: 0, missed: 0, missedList: [], stalls: 0, engine: $('engine').value, workout: workout.name },
   };
   logEntries = [];
   log(0, `${workout.name} started, ${engine === engines.speech ? 'speech' : 'clips'}`, clockTime(run.startedAt));
@@ -281,6 +282,7 @@ function tick() {
         // A late countdown digit or a stale cue is worse than silence.
         if ((cue.countdown && late > 1) || late > 5) {
           run.stats.missed++;
+          run.stats.missedList.push(`${fmt(cue.t)} "${cue.text}" ${late.toFixed(1)} s late`);
           log(cue.t, cue.text, `missed, ${late.toFixed(1)} s late`, true);
           continue;
         }
@@ -438,6 +440,7 @@ function resultsText() {
   if (lastRunStats) {
     const s = lastRunStats;
     lines.push('', `Last run: ${s.workout}, ${s.engine}, ${fmt(s.seconds)}; max cue delay ${s.maxLate.toFixed(2)} s, missed ${s.missed}, audio stalls ${s.stalls}`);
+    for (const m of s.missedList || []) lines.push(`  missed ${m}`);
   }
   if (results.notes) lines.push('', `Notes: ${results.notes}`);
   return lines.join('\n');
@@ -469,6 +472,7 @@ $('finish').addEventListener('click', finish);
 $('lock').addEventListener('click', lock);
 $('testVoice').addEventListener('click', async () => {
   const engine = engines[$('engine').value];
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* ignore */ }
   try {
     await engine.prepare();
     if (engine.kind === 'tick') engine.say('Voice test. 205 watts for 1 minute.');
