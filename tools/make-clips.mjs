@@ -3,8 +3,9 @@
 // "Ryan" voice from
 // https://github.com/rhasspy/piper/releases/download/v0.0.2/voice-en-us-ryan-high.tar.gz
 // Run from the repo root: PIPER_MODEL=path/to/en-us-ryan-high.onnx node tools/make-clips.mjs
+// Add KEEP=1 to record only phrases that have no clip yet (and drop unused ones).
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, mkdtempSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { vocabulary, clipName } from '../js/cues.js';
@@ -16,14 +17,16 @@ const phrases = vocabulary();
 // Countdown digits are spoken as words in full sentences ("Five."), which
 // keeps them in the same voice and tone as the longer cues.
 const WORDS = { '5.': 'Five.', '4.': 'Four.', '3.': 'Three.', '2.': 'Two.', '1.': 'One.' };
-const jobs = phrases.map(text => [text, join(tmp, clipName(text).replace('.mp3', '.wav'))]);
+const keep = process.env.KEEP === '1';
+const jobs = phrases.filter(t => !(keep && existsSync(`clips/${clipName(t)}`))).map(text => [text, join(tmp, clipName(text).replace('.mp3', '.wav'))]);
 const spoken = jobs.map(([text, wav]) => [WORDS[text] || text, wav]);
 execFileSync('python3', ['tools/synth.py', model], { input: JSON.stringify(spoken), stdio: ['pipe', 'inherit', 'inherit'] });
 
 const dir = 'clips';
-rmSync(dir, { recursive: true, force: true });
-mkdirSync(dir);
+if (!keep) rmSync(dir, { recursive: true, force: true });
+mkdirSync(dir, { recursive: true });
 const manifest = {};
+if (keep) for (const t of phrases) manifest[t] = clipName(t);
 for (const [text, wav] of jobs) {
   const file = clipName(text);
   // Trim leading and trailing silence, then encode small mono MP3.
@@ -33,5 +36,9 @@ for (const [text, wav] of jobs) {
   manifest[text] = file;
 }
 rmSync(tmp, { recursive: true, force: true });
+if (keep) {
+  const used = new Set(Object.values(manifest));
+  for (const f of readdirSync(dir)) if (f.endsWith('.mp3') && !used.has(f)) rmSync(`${dir}/${f}`);
+}
 writeFileSync(`${dir}/manifest.json`, JSON.stringify(manifest, null, 1) + '\n');
-console.log(`${phrases.length} clips`);
+console.log(`${phrases.length} phrases, ${jobs.length} recorded`);

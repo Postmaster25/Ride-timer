@@ -18,7 +18,8 @@ export function durSegs(sec) {
 export function wattsSegs(lo, hi) {
   if (hi == null || hi === 0) return [];
   if (lo == null || lo === 0 || lo === hi) return [`${hi} watts`];
-  return [`${lo}`, 'to', `${hi} watts`];
+  // "250 to" is one recording: a lone "to" comes out as a mumbled "tah".
+  return [`${lo} to`, `${hi} watts`];
 }
 
 export function repSegs(rep) {
@@ -117,7 +118,7 @@ export function buildCues(steps, workoutCode) {
 // Every phrase the app can say, for recording clips.
 export function vocabulary() {
   const v = new Set([
-    'Warm-up,', 'Recovery,', 'Cool down,', 'Steady,', 'Next interval starting in 15 seconds:', 'for', 'to',
+    'Warm-up,', 'Recovery,', 'Cool down,', 'Steady,', 'Next interval starting in 15 seconds:', 'for',
     'Halfway.', 'One minute left.', 'Workout complete.', 'Workout ended.', 'Resuming.', 'left.', 'Go.', 'Ease.',
     'Rep', 'of', 'Voice on.',
     'Ten minutes in. The next 20 minutes are the ones to track.',
@@ -125,7 +126,7 @@ export function vocabulary() {
   for (let k = 1; k <= 5; k++) v.add(`${k}.`);
   for (let m = 1; m <= LIMITS.minutes; m++) v.add(plural(m, 'minute'));
   for (let s = 1; s <= 59; s++) v.add(plural(s, 'second'));
-  for (let w = LIMITS.wattsMin; w <= LIMITS.wattsMax; w += 5) { v.add(`${w} watts`); v.add(`${w}`); }
+  for (let w = LIMITS.wattsMin; w <= LIMITS.wattsMax; w += 5) { v.add(`${w} watts`); v.add(`${w} to`); }
   for (let n = 1; n <= 60; n++) v.add(`${n}`);
   for (let of = 1; of <= LIMITS.reps; of++) for (let n = 1; n <= of; n++) v.add(`Rep ${n} of ${of}.`);
   for (let n = 1; n <= LIMITS.toGo; n++) v.add(`${n} to go.`);

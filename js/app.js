@@ -9,6 +9,15 @@ const $ = sel => document.querySelector(sel);
 const view = $('#view');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// Show unexpected errors on the page, so a broken button never fails silently.
+const showError = msg => {
+  let bar = document.getElementById('errorBar');
+  if (!bar) { bar = document.createElement('div'); bar.id = 'errorBar'; bar.className = 'errorbar'; document.body.prepend(bar); bar.onclick = () => bar.remove(); }
+  bar.textContent = `Something went wrong: ${msg} (tap to dismiss)`;
+};
+window.addEventListener('error', e => showError(e.message));
+window.addEventListener('unhandledrejection', e => showError(e.reason?.message || String(e.reason)));
+
 // ---------- storage (Safari can block or clear it) ----------
 let storageOk = true;
 const store = {
@@ -359,6 +368,7 @@ function updateTimer() {
 
 // ---------- settings ----------
 let pendingPlan = null;
+let pickedName = '';
 
 function renderSettings() {
   const p = state.plan;
@@ -398,26 +408,44 @@ function renderSettings() {
     voice.sayNow(segs);
   };
   $('#sFile').onchange = async e => {
-    const f = e.target.files[0];
+    const input = e.target;
+    const f = input.files[0];
     if (!f) return;
-    try { $('#sJson').value = await f.text(); } catch (err) { $('#sResult').innerHTML = `<div class="errors"><b>That file couldn't be read.</b><p>${esc(err.message)}</p></div>`; return; }
+    $('#sResult').innerHTML = `<p class="muted">Reading ${esc(f.name)}…</p>`;
+    try {
+      $('#sJson').value = await f.text();
+      pickedName = `${f.name} (${Math.round(f.size / 1024)} KB)`;
+    } catch (err) {
+      $('#sResult').innerHTML = `<div class="errors"><b>${esc(f.name)} couldn't be read.</b><p>${esc(err.message)}</p></div>`;
+      return;
+    } finally {
+      input.value = ''; // so picking the same file again still fires
+    }
     checkPlan();
   };
   $('#sCheck').onclick = checkPlan;
+  $('#sJson').oninput = () => { pickedName = ''; };
 }
 
 function checkPlan() {
+  try { checkPlanInner(); } catch (e) {
+    $('#sResult').innerHTML = `<div class="errors"><b>Something went wrong checking the plan.</b><p>${esc(e.message)}</p></div>`;
+  }
+}
+
+function checkPlanInner() {
   const out = $('#sResult');
   // Close the keyboard and bring the result into view; on a phone it would
   // otherwise land below the keyboard and the button seems to do nothing.
   document.activeElement?.blur?.();
+  const checkedAt = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
   const show = html => {
-    out.innerHTML = html;
+    out.innerHTML = `<p class="muted">Checked ${pickedName ? esc(pickedName) : 'pasted text'} at ${checkedAt}</p>${html}`;
     requestAnimationFrame(() => out.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
   pendingPlan = null;
   // iOS "smart punctuation" can turn pasted quotes into curly ones.
-  const text = $('#sJson').value.replace(/[\u201C\u201D\u201E\u201F]/g, '"').replace(/[\u2018\u2019]/g, "'").trim();
+  const text = $('#sJson').value.replace(/^\uFEFF/, '').replace(/[\u201C\u201D\u201E\u201F]/g, '"').replace(/[\u2018\u2019]/g, "'").trim();
   if (!text) {
     show(`<div class="errors"><b>Paste the plan JSON or choose a file first.</b></div>`);
     return;
@@ -465,11 +493,17 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     if (e.data?.version) { appVersion = e.data.version; const el = $('#sVersion'); if (el) el.textContent = appVersion; }
   });
   navigator.serviceWorker.ready.then(reg => reg.active?.postMessage('version')).catch(() => {});
-  // A new version took over: reload to use it, but never in the middle of a ride.
-  let reloadWanted = false;
+  // A new version took over. Reload to use it only when that can't lose
+  // anything: before the first tap, or when the app is next opened. Never
+  // in the middle of a ride or while a plan is being imported.
+  let reloadWanted = false, touched = false;
+  for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { touched = true; }, { capture: true, passive: true });
+  const maybeReload = () => {
+    if (!reloadWanted || (run && !run.done)) return;
+    if (!touched || document.visibilityState === 'hidden') location.reload();
+  };
   navigator.serviceWorker.addEventListener('controllerchange', () => { reloadWanted = true; maybeReload(); });
-  const maybeReload = () => { if (reloadWanted && !(run && !run.done)) location.reload(); };
-  setInterval(maybeReload, 5000);
+  document.addEventListener('visibilitychange', maybeReload);
 }
 
 // ---------- global wiring ----------

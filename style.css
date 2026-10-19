@@ -109,3 +109,5 @@ video.hidden { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-eve
 @media (min-width: 700px) {
   .tclock { font-size: 180px; }
 }
+
+.errorbar { position: sticky; top: 0; z-index: 20; background: #5a1515; color: #fff; padding: 10px 14px; border-radius: 0 0 10px 10px; font-size: 15px; max-width: 640px; margin: 0 auto; }
