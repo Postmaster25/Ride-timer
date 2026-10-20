@@ -35,6 +35,7 @@ export function validatePlan(plan) {
       if (day.minutes != null && (!isInt(day.minutes) || day.minutes < 0)) errors.push(`${dLabel}: "minutes" must be a whole number of 0 or more.`);
       if (day.optional != null && typeof day.optional !== 'boolean') errors.push(`${dLabel}: "optional" must be true or false.`);
       if (day.kind !== 'ride') return;
+      if (day.outdoor != null && typeof day.outdoor !== 'boolean') errors.push(`${dLabel}: "outdoor" must be true or false.`);
       rides++;
       const rLabel = `${dLabel} (${day.title || 'untitled ride'})`;
       if (!day.title || typeof day.title !== 'string') errors.push(`${dLabel}: ride has no "title".`);
@@ -135,6 +136,13 @@ export function scaledStep(step, plan, ftp) {
   return { ...step, wattsLow: lo ?? hi, wattsHigh: hi ?? lo };
 }
 
+// The steps as ridden: outdoor rides have no power meter, so they carry no
+// watts at all (none scaled, none shown); trainer rides scale to the FTP.
+export function rideSteps(day, plan, ftp) {
+  if (day.outdoor) return day.steps.map(({ wattsLow, wattsHigh, ...rest }) => rest);
+  return day.steps.map(s => scaledStep(s, plan, ftp));
+}
+
 export function allRides(plan) {
   const out = [];
   for (const wk of plan?.weeks || []) for (const day of wk.days) if (day.kind === 'ride') out.push({ week: wk.week, day });
@@ -222,12 +230,13 @@ const pct = (w, ftp) => Math.round((w / ftp) * 100);
 
 // Plain-text description Cody pastes into Strava.
 export function description(day, plan, ftp) {
-  const steps = day.steps.map(s => scaledStep(s, plan, ftp));
+  const steps = rideSteps(day, plan, ftp);
   const main = mainSteps(steps);
   const label = main[0]?.label || day.name || day.workoutCode || '';
   const lines = [`${day.title} | ${label}`];
 
   const target = s => {
+    if (day.outdoor) return s.rpe ? ` at RPE ${s.rpe}` : '';
     if (s.wattsHigh == null) return '';
     const w = s.wattsLow === s.wattsHigh ? `${s.wattsLow} W` : `${s.wattsLow} to ${s.wattsHigh} W`;
     const p = s.wattsLow === s.wattsHigh ? `${pct(s.wattsLow, ftp)}%` : `${pct(s.wattsLow, ftp)} to ${pct(s.wattsHigh, ftp)}%`;

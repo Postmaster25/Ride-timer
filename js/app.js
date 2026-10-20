@@ -1,5 +1,5 @@
 import {
-  validatePlan, scaledStep, findRide, allRides, lastWeek, calendar, toYMD, addDays, mondayOf, WEEKDAYS,
+  validatePlan, rideSteps, findRide, allRides, lastWeek, calendar, toYMD, addDays, mondayOf, WEEKDAYS,
   description, shortDuration, wattsLabel, hrLabel, cadenceLabel, totalSeconds, stageHours, planTotals,
 } from './plan.js';
 import { buildCues, resumeSegs, durSegs } from './cues.js';
@@ -200,7 +200,7 @@ function renderRide(title) {
   const found = findRide(state.plan, title);
   if (!found) { view.innerHTML = `<section class="card empty"><h2>Workout not found</h2><button data-go="#/">Back to week</button></section>`; return; }
   const { week, day } = found;
-  const steps = day.steps.map(s => scaledStep(s, state.plan, state.ftp));
+  const steps = rideSteps(day, state.plan, state.ftp);
   const desc = description(day, state.plan, state.ftp);
   const skipped = !!state.skips[day.title];
   const cal = calendar(state.startDate);
@@ -219,19 +219,22 @@ function renderRide(title) {
       <button class="big" id="startRide">Start</button>
     </section>
     <h3>Steps</h3>
-    <ol class="steps">${steps.map(stepHtml).join('')}</ol>`;
+    <ol class="steps">${steps.map(s => stepHtml(s, day.outdoor)).join('')}</ol>`;
   view.querySelector('[data-copy="title"]').onclick = e => copyText(day.title, e.target);
   view.querySelector('[data-copy="desc"]').onclick = e => copyText(desc, e.target);
   $('#startRide').onclick = () => startRun(found, steps);
 }
 
-function stepHtml(s) {
+// Outdoor rides show only heart rate, RPE and time (no power meter).
+function stepHtml(s, outdoor) {
   const name = s.label || { warmup: 'Warm-up', work: 'Interval', recovery: 'Recovery', cooldown: 'Cool down', steady: 'Steady' }[s.type];
-  const bits = [wattsLabel(s.wattsLow, s.wattsHigh), hrLabel(s), cadenceLabel(s), s.rpe ? `RPE ${esc(s.rpe)}` : ''].filter(Boolean);
+  const bits = (outdoor ? [hrLabel(s), rpeLabel(s)] : [wattsLabel(s.wattsLow, s.wattsHigh), hrLabel(s), cadenceLabel(s), rpeLabel(s)]).filter(Boolean);
   return `<li class="step ${s.type}"><div class="dur">${shortDuration(s.seconds)}</div>
     <div><b>${esc(name)}</b>${s.rep ? ` <span class="muted">rep ${s.rep.n} of ${s.rep.of}</span>` : ''}
     <div class="muted">${bits.join(' · ')}</div>${s.notes ? `<div class="notes">${esc(s.notes)}</div>` : ''}</div></li>`;
 }
+
+const rpeLabel = s => s.rpe ? `RPE ${esc(s.rpe)}` : '';
 
 // ---------- timer ----------
 let run = null;
@@ -249,7 +252,7 @@ async function startRun(found, steps) {
   wake.on();
   let t = 0;
   const laid = steps.map((s, i) => { const x = { ...s, index: i, start: t, end: t + s.seconds }; t = x.end; return x; });
-  const cues = state.voiceOn ? buildCues(steps, found.day.workoutCode) : [];
+  const cues = state.voiceOn ? buildCues(steps, found.day.workoutCode, !!found.day.outdoor) : [];
   run = { found, steps: laid, cues, total: t, startedAt: 0, pausedAt: null, pausedTotal: 0, next: 0, done: false, loading: true, fallback: [] };
   go('#/timer');
   if (state.voiceOn) {
@@ -388,9 +391,12 @@ function updateTimer() {
   $('#tStep').className = `tstep ${run.done ? '' : step.type}`;
   $('#tRep').textContent = !run.done && step.rep ? `Rep ${step.rep.n} of ${step.rep.of}` : '';
   $('#tClock').textContent = run.done ? fmtClock(run.endedEarly ?? run.total) : fmtClock(step.end - t);
-  $('#tTarget').textContent = run.done ? '' : wattsLabel(step.wattsLow, step.wattsHigh);
-  $('#tHr').textContent = run.done ? '' : [hrLabel(step), cadenceLabel(step)].filter(Boolean).join(' · ');
-  $('#tNext').textContent = run.done ? '' : next ? `Next: ${next.label || next.type} ${shortDuration(next.seconds)}${next.wattsHigh ? `, ${wattsLabel(next.wattsLow, next.wattsHigh)}` : ''}` : 'Last step';
+  // Outdoor rides: heart rate takes the big target line, RPE goes under it.
+  const outdoor = !!run.found.day.outdoor;
+  const nextTarget = next && (outdoor ? hrLabel(next) : next.wattsHigh ? wattsLabel(next.wattsLow, next.wattsHigh) : '');
+  $('#tTarget').textContent = run.done ? '' : outdoor ? hrLabel(step) : wattsLabel(step.wattsLow, step.wattsHigh);
+  $('#tHr').textContent = run.done ? '' : (outdoor ? [step.rpe ? `RPE ${step.rpe}` : ''] : [hrLabel(step), cadenceLabel(step)]).filter(Boolean).join(' · ');
+  $('#tNext').textContent = run.done ? '' : next ? `Next: ${next.label || next.type} ${shortDuration(next.seconds)}${nextTarget ? `, ${nextTarget}` : ''}` : 'Last step';
   $('#tBar').style.width = `${(t / run.total) * 100}%`;
   $('#tElapsed').textContent = `${fmtClock(t)} elapsed`;
   $('#tLeft').textContent = run.done ? '' : `${fmtClock(run.total - t)} left`;

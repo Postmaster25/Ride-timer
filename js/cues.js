@@ -4,7 +4,7 @@
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-export const LIMITS = { minutes: 240, wattsMin: 50, wattsMax: 800, reps: 12, toGo: 20 };
+export const LIMITS = { minutes: 240, wattsMin: 50, wattsMax: 800, reps: 12, toGo: 20, hrMin: 80, hrMax: 200, rpeMax: 10 };
 
 export function durSegs(sec) {
   sec = Math.max(1, Math.round(sec));
@@ -22,6 +22,18 @@ export function wattsSegs(lo, hi) {
   return [`${lo} to`, `${hi} watts`];
 }
 
+// Outdoor rides have no power meter: name the heart rate range, or the
+// effort (RPE) when the step has no heart rate.
+export function effortSegs(step) {
+  const { hrLow: lo, hrHigh: hi } = step;
+  if (lo != null && hi != null) return lo === hi ? ['Heart rate', `${hi}`] : ['Heart rate', `${lo} to`, `${hi}`];
+  if (hi != null) return ['Heart rate under', `${hi}`];
+  if (lo != null) return ['Heart rate over', `${lo}`];
+  const m = /^(\d+)(?: to (\d+))?$/.exec(String(step.rpe ?? '').trim());
+  if (!m) return [];
+  return [m[2] && m[2] !== m[1] ? `Effort ${m[1]} to ${m[2]}.` : `Effort ${m[1]}.`];
+}
+
 export function repSegs(rep) {
   if (!rep) return [];
   if (rep.of <= LIMITS.reps) return [`Rep ${rep.n} of ${rep.of}.`];
@@ -37,7 +49,9 @@ export const isTestRide = code => TEST_CODE.test(code || '');
 
 // steps: scaled steps (watts already at the rider's FTP). Returns sorted cues
 // { t, segments, countdown } with t in seconds from the start of the ride.
-export function buildCues(steps, workoutCode) {
+// Outdoor rides name heart rate or effort instead of watts.
+export function buildCues(steps, workoutCode, outdoor = false) {
+  const target = s => outdoor ? effortSegs(s) : wattsSegs(s.wattsLow, s.wattsHigh);
   const cues = [];
   const add = (t, segments, countdown = false) => { if (t >= 0 && segments.length) cues.push({ t, segments, countdown }); };
   const countdown = endT => { for (let k = 5; k >= 1; k--) add(endT - k, [`${k}.`], true); };
@@ -86,7 +100,7 @@ export function buildCues(steps, workoutCode) {
     }
     // Advance notice, unless the step before is shorter than 20 s.
     if (prev && prev.seconds >= 20 && prev.type !== 'work') {
-      const w = wattsSegs(step.wattsLow, step.wattsHigh);
+      const w = target(step);
       add(step.start - 15, ['Next interval starting in 15 seconds:', ...w, ...(w.length ? ['for'] : []), ...durSegs(step.seconds)]);
     }
     if (isV30Effort) {
@@ -97,7 +111,7 @@ export function buildCues(steps, workoutCode) {
     if (test) {
       add(step.start, ['Go.', ...durSegs(step.seconds)]);
     } else {
-      add(step.start, [...repSegs(step.rep), ...wattsSegs(step.wattsLow, step.wattsHigh), ...durSegs(step.seconds)]);
+      add(step.start, [...repSegs(step.rep), ...target(step), ...durSegs(step.seconds)]);
       if (step.seconds >= 240) add(step.start + step.seconds / 2, ['Halfway.']);
       if (step.seconds >= 180) add(step.end - 60, ['One minute left.']);
     }
@@ -128,6 +142,12 @@ export function vocabulary() {
   for (let s = 1; s <= 59; s++) v.add(plural(s, 'second'));
   for (let w = LIMITS.wattsMin; w <= LIMITS.wattsMax; w += 5) { v.add(`${w} watts`); v.add(`${w} to`); }
   for (let n = 1; n <= 60; n++) v.add(`${n}`);
+  v.add('Heart rate'); v.add('Heart rate under'); v.add('Heart rate over');
+  for (let n = LIMITS.hrMin; n <= LIMITS.hrMax; n++) { v.add(`${n}`); v.add(`${n} to`); }
+  for (let a = 1; a <= LIMITS.rpeMax; a++) {
+    v.add(`Effort ${a}.`);
+    for (let b = a + 1; b <= LIMITS.rpeMax; b++) v.add(`Effort ${a} to ${b}.`);
+  }
   for (let of = 1; of <= LIMITS.reps; of++) for (let n = 1; n <= of; n++) v.add(`Rep ${n} of ${of}.`);
   for (let n = 1; n <= LIMITS.toGo; n++) v.add(`${n} to go.`);
   return [...v];

@@ -1,6 +1,6 @@
 // Run with: node test/run.mjs
 import assert from 'node:assert/strict';
-import { validatePlan, description, scaledStep, calendar, toYMD, scaleWatts, planTotals, stageHours } from '../js/plan.js';
+import { validatePlan, description, scaledStep, rideSteps, calendar, toYMD, scaleWatts, planTotals, stageHours } from '../js/plan.js';
 import { buildCues, vocabulary } from '../js/cues.js';
 import { SAMPLE } from './sample-plan.mjs';
 
@@ -146,6 +146,46 @@ test('stages must start at week 1 and cover every week in order', () => {
   assert.ok(validatePlan(p).errors.some(e => e.includes('week 4 was expected')));
   p.stages = [{ name: 'A', startWeek: 1, endWeek: 3, days: {} }];
   assert.ok(validatePlan(p).errors.some(e => e.includes('plan runs to week 5')));
+});
+
+// An outdoor climb-pace ride like the real plan's: no watts on any step.
+const OUTDOOR = {
+  weekday: 6, kind: 'ride', title: 'W22 RP1', name: 'Climb pace', workoutCode: 'RP1', outdoor: true, minutes: 133,
+  steps: [
+    { type: 'warmup', label: 'Warm-up', seconds: 600, hrLow: 112, hrHigh: 136 },
+    { type: 'work', label: 'Opener', seconds: 30, rpe: '8', cue: 'short' },
+    { type: 'recovery', seconds: 90, hrHigh: 125, cue: 'short' },
+    { type: 'work', label: 'Climb pace', seconds: 600, hrLow: 155, hrHigh: 165, rpe: '7', rep: { n: 1, of: 2 } },
+    { type: 'recovery', seconds: 300, hrHigh: 125 },
+    { type: 'work', label: 'Climb pace', seconds: 600, rpe: '7', rep: { n: 2, of: 2 } },
+    { type: 'steady', label: 'Ride easy', seconds: 4800, hrLow: 112, hrHigh: 136, rpe: '3 to 4' },
+  ],
+};
+
+test('outdoor rides: validated, never scaled or given watts', () => {
+  const p = structuredClone(SAMPLE);
+  p.weeks[0].days.push(structuredClone(OUTDOOR));
+  assert.deepEqual(validatePlan(p).errors, []);
+  const withWatts = { ...structuredClone(OUTDOOR), steps: [{ type: 'steady', seconds: 600, wattsLow: 150, wattsHigh: 180 }] };
+  assert.ok(rideSteps(withWatts, p, 300).every(s => s.wattsLow == null && s.wattsHigh == null));
+  assert.equal(rideSteps(SAMPLE.weeks[0].days[1], SAMPLE, 235)[0].wattsHigh, 165); // trainer rides still scale
+  p.weeks[0].days[2].outdoor = 'yes';
+  assert.ok(validatePlan(p).errors.some(e => e.includes('"outdoor" must be true or false')));
+  const d = description(OUTDOOR, SAMPLE, 235);
+  assert.ok(!/ W\b|FTP/.test(d), d);
+  assert.ok(d.includes('Planned: 2 x 10 min at RPE 7, HR about 155 to 165 bpm, 5 min recovery.'), d);
+});
+
+test('outdoor cues name heart rate or effort, never watts, and have clips', () => {
+  const lines = say(buildCues(rideSteps(OUTDOOR, SAMPLE, 235), 'RP1', true));
+  assert.ok(lines.includes('705 Next interval starting in 15 seconds: Heart rate 155 to 165 for 10 minutes'), lines.join('\n'));
+  assert.ok(lines.includes('720 Rep 1 of 2. Heart rate 155 to 165 10 minutes'), lines.join('\n'));
+  assert.ok(lines.includes('1620 Rep 2 of 2. Effort 7. 10 minutes'), lines.join('\n'));
+  assert.ok(!lines.some(l => l.includes('watts')));
+  const vocab = new Set(vocabulary());
+  for (const l of buildCues(rideSteps(OUTDOOR, SAMPLE, 235), 'RP1', true)) for (const seg of l.segments) assert.ok(vocab.has(seg), seg);
+  // Indoor steps with no watts (the ramp test) just leave the target out.
+  assert.ok(say(buildCues([{ type: 'work', seconds: 600, rpe: '10' }], 'RAMP')).includes('0 10 minutes'));
 });
 
 let failed = 0;
