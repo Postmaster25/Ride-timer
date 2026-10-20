@@ -248,13 +248,18 @@ export function description(day, plan, ftp) {
     return '';
   };
   const durWord = sec => shortDuration(sec);
+  // Each step is named by its own type: only "cooldown" is a cool-down, and a
+  // steady step goes by its label ("ride easy 80 min", "long ride 90 min").
+  const stepName = s => s.type === 'warmup' ? 'warm-up' : s.type === 'cooldown' ? 'cool-down'
+    : s.type === 'steady' ? (s.label || 'steady').toLowerCase() : null;
+  const steadyName = s => s.type === 'steady' ? `${stepName(s)} ` : '';
 
   let planned;
   if (main.length) {
     const same = main.every(s => s.seconds === main[0].seconds && s.wattsLow === main[0].wattsLow && s.wattsHigh === main[0].wattsHigh);
     const parts = [];
-    if (same) parts.push(`${main.length > 1 ? `${main.length} x ` : ''}${durWord(main[0].seconds)}${target(main[0])}`);
-    else parts.push(main.map(s => `${durWord(s.seconds)}${target(s)}`).join(', '));
+    if (same) parts.push(`${main.length > 1 ? `${main.length} x ` : ''}${steadyName(main[0])}${durWord(main[0].seconds)}${target(main[0])}`);
+    else parts.push(main.map(s => `${steadyName(s)}${durWord(s.seconds)}${target(s)}`).join(', '));
     const h = hr(main[0]);
     if (h) parts.push(h);
     if (main.length > 1) {
@@ -269,13 +274,27 @@ export function description(day, plan, ftp) {
   lines.push(planned);
 
   if (main.length) {
+    // The steps before and after the main set, merged into runs of the same
+    // name. Openers and recoveries outside the main set have no name of their
+    // own and count toward the step they follow (the warm-up they sit in), or
+    // the next named step when nothing comes before them.
     const first = steps.indexOf(main[0]), last = steps.indexOf(main[main.length - 1]);
-    const wu = steps.slice(0, first).reduce((a, s) => a + s.seconds, 0);
-    const cd = steps.slice(last + 1).reduce((a, s) => a + s.seconds, 0);
-    const bits = [];
-    if (wu) bits.push(`Warm-up ${durWord(wu)}`);
-    if (cd) bits.push(`cool-down ${durWord(cd)}`);
-    if (bits.length) lines.push(`${bits.join(', ').replace(/^c/, 'C')}.`);
+    const runs = [];
+    for (const part of [steps.slice(0, first), steps.slice(last + 1)]) {
+      const named = [];
+      let carry = 0;
+      for (const s of part) {
+        const name = stepName(s);
+        if (!name) { if (named.length) named[named.length - 1].sec += s.seconds; else carry += s.seconds; continue; }
+        const prev = named[named.length - 1];
+        if (prev?.name === name) prev.sec += s.seconds;
+        else named.push({ name, sec: s.seconds });
+      }
+      if (named.length) named[0].sec += carry;
+      runs.push(...named);
+    }
+    const bits = runs.map(r => `${r.name} ${durWord(r.sec)}`);
+    if (bits.length) lines.push(`${bits.join(', ').replace(/^./, c => c.toUpperCase())}.`);
   }
   lines.push(`Plan version: ${plan.version}`);
   return lines.join('\n');

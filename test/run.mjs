@@ -176,6 +176,12 @@ test('outdoor rides: validated, never scaled or given watts', () => {
   assert.ok(d.includes('Planned: 2 x 10 min at RPE 7, HR about 155 to 165 bpm, 5 min recovery.'), d);
 });
 
+test('description names steps by type: a trailing steady step is not a cool-down', () => {
+  assert.equal(description(OUTDOOR, SAMPLE, 235).split('\n')[2], 'Warm-up 12 min, ride easy 80 min.');
+  const long = { title: 'W1 L1', name: 'Long ride', outdoor: true, steps: [{ type: 'steady', label: 'Long ride', seconds: 5400, hrLow: 112, hrHigh: 136, rpe: '3 to 4' }] };
+  assert.equal(description(long, SAMPLE, 235).split('\n')[1], 'Planned: long ride 90 min at RPE 3 to 4, HR about 112 to 136 bpm.');
+});
+
 test('outdoor cues name heart rate or effort, never watts, and have clips', () => {
   const lines = say(buildCues(rideSteps(OUTDOOR, SAMPLE, 235), 'RP1', true));
   assert.ok(lines.includes('705 Next interval starting in 15 seconds: Heart rate 155 to 165 for 10 minutes'), lines.join('\n'));
