@@ -213,11 +213,9 @@ function renderWeek(weekNum) {
     return { wd, date, ymd, isToday: ymd === nowYMD, past: ymd != null && ymd < nowYMD, before: date && cal.beforeStart(date),
       items: (weekData?.days || []).filter(d => d.weekday === wd) };
   });
-  const rides = days.flatMap(d => d.before ? [] : d.items.filter(i => i.kind === 'ride').map(r => ({ ride: r, day: d })));
-  // The card shows today's ride, else the next one this week, else the last.
-  const auto = rides.find(r => r.day.ymd == null || r.day.ymd >= nowYMD) || rides[rides.length - 1] || null;
-  const chosen = (picked?.week === wk && rides.find(r => r.ride.title === picked.title)) || auto;
-  const other = chosen && auto && chosen !== auto;
+  // Days stay in order. Today's ride is always open as a card; any other
+  // ride opens in place when tapped (one at a time) and closes on a second tap.
+  const openTitle = picked?.week === wk ? picked.title : null;
 
   const stage = stageOf(plan, wk);
   const range = cal ? `${fmtDate(cal.dateOf(wk, 1))} – ${fmtDate(cal.dateOf(wk, 7))}` : 'Preview';
@@ -226,8 +224,8 @@ function renderWeek(weekNum) {
   const strip = days.map(d => {
     const kinds = [...new Set(d.items.map(i => i.kind).filter(k => k === 'ride' || k === 'run' || k === 'strength'))];
     const ride = d.items.find(i => i.kind === 'ride');
-    const sel = chosen && chosen.day === d;
-    return `<button class="d${d.isToday ? ' today' : ''}${d.past || d.before ? ' past' : ''}${sel ? ' sel' : ''}" ${ride && !d.before ? `data-pick="${esc(ride.title)}"` : 'tabindex="-1"'}>
+    const sel = ride && ride.title === openTitle;
+    return `<button class="d${d.isToday ? ' today' : ''}${d.past || d.before ? ' past' : ''}${sel ? ' sel' : ''}" ${ride && !d.before ? `data-open="${esc(ride.title)}"` : 'tabindex="-1"'}>
       <b>${WEEKDAYS[d.wd - 1][0]}</b><span class="num">${d.date ? d.date.getDate() : d.wd}</span>
       <i>${kinds.map(k => `<em style="background:var(${KIND_COLOR[k]})"></em>`).join('')}</i></button>`;
   }).join('');
@@ -239,13 +237,16 @@ function renderWeek(weekNum) {
     if (d.before) { rows.push(`<div class="row${cls}">${kico('rest')}${base}<div class="tx"><b>Before start</b></div></div>`); continue; }
     if (!d.items.length) { rows.push(`<div class="row${cls}">${kico('rest')}${base}<div class="tx"><b>${d.wd === 7 ? 'Free' : 'Nothing planned'}</b></div></div>`); continue; }
     for (const item of d.items) {
-      if (chosen && item === chosen.ride) continue;
+      if (item.kind === 'ride' && (d.isToday || item.title === openTitle)) {
+        rows.push(heroHtml({ ride: item, day: d }, !d.isToday, cal, now));
+        continue;
+      }
       if (item.kind === 'ride') {
         const steps = rideSteps(item, plan, state.ftp);
         const main = mainSteps(steps)[0] || steps[0];
         const skipped = !!state.skips[item.title];
         const sub = [item.title, hmin(totalSeconds(steps)), wTxt(main) ? `${wTxt(main)} W` : hTxt(main) ? `${hTxt(main)} bpm` : ''].filter(Boolean).join(' · ');
-        rows.push(`<button class="row${cls}${skipped ? ' skipped' : ''}" data-pick="${esc(item.title)}">${kico('ride')}${base}
+        rows.push(`<button class="row${cls}${skipped ? ' skipped' : ''}" data-pick="${esc(item.title)}" data-card="${esc(item.title)}">${kico('ride')}${base}
           <div class="tx"><b>${esc(item.name || item.title)}</b><span>${esc(sub)}</span></div>${skipped ? '<span class="tag">Skipped</span>' : `<span class="chev">${ICON.right}</span>`}</button>`);
       } else {
         const text = item.summary || (item.kind === 'rest' ? 'Rest' : item.kind === 'free' ? 'Free' : item.kind);
@@ -262,8 +263,6 @@ function renderWeek(weekNum) {
       <div class="navpills"><button data-go="#/week/${wk - 1}" ${wk <= 1 ? 'disabled' : ''} aria-label="Previous week">${ICON.left}</button>
         <button data-go="#/week/${wk + 1}" ${wk >= last ? 'disabled' : ''} aria-label="Next week">${ICON.right}</button></div></div>
     <div class="strip">${strip}</div>
-    ${chosen ? heroHtml(chosen, other, cal, now) : ''}
-    ${other ? `<button class="backtoday" data-act="autoride">${ICON.cal}Back to ${auto.day.isToday ? 'today’s' : 'this week’s'} ride</button>` : ''}
     <div class="rows">${rows.join('')}</div>
     ${cal && curWeek >= 1 && curWeek <= last && wk !== curWeek ? `<button class="ghost wide" style="margin-top:14px" data-go="#/week/${curWeek}">Back to this week</button>` : ''}`;
 }
@@ -284,8 +283,8 @@ function heroHtml({ ride, day }, other, cal, now) {
   if (hTxt(main)) chips.push(`<span class="chip hr">${ICON.heart}${hTxt(main)}</span>`);
   if (ride.outdoor) chips.push(`<span class="chip">Outdoor</span>`);
   if (skipped) chips.push(`<span class="tag">Skipped</span>`);
-  return `<div class="hero${other ? ' other' : ''}">
-    <div class="top"><span class="eyebrow">${esc(relDay(day, now))}</span><span class="code">${esc(ride.title)}</span></div>
+  return `<div class="hero${other ? ' other' : ''}" data-card="${esc(ride.title)}">
+    <div class="top"><span class="eyebrow">${esc(relDay(day, now))}</span><span class="topr"><span class="code">${esc(ride.title)}</span>${other ? `<button class="iconbtn collapse" data-pick="${esc(ride.title)}" aria-label="Close">${ICON.down}</button>` : ''}</span></div>
     <h3><a href="#/ride/${encodeURIComponent(ride.title)}">${esc(ride.name || ride.title)}</a></h3>
     <div class="meta">${chips.join('')}</div>
     ${profile(steps, { w: 326, h: 46 })}
@@ -943,15 +942,17 @@ document.addEventListener('click', e => {
   if (g) { e.preventDefault(); go(g.dataset.go); return; }
   const s = el('[data-skip]');
   if (s) { e.preventDefault(); toggleSkip(s.dataset.skip); return; }
-  const pk = el('[data-pick]');
+  // Rides in the week list open in place: a row toggles, a day chip opens.
+  const pk = el('[data-pick]') || el('[data-open]');
   if (pk) {
+    const title = pk.dataset.pick ?? pk.dataset.open;
     const wk = parseInt(location.hash.split('/')[2], 10) || null;
-    picked = { week: findRide(state.plan, pk.dataset.pick)?.week ?? null, title: pk.dataset.pick };
+    picked = pk.dataset.pick != null && picked?.title === title ? null : { week: findRide(state.plan, title)?.week ?? null, title };
     renderWeek(wk);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const card = [...document.querySelectorAll('[data-card]')].find(c => c.dataset.card === title);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     return;
   }
-  if (el('[data-act="autoride"]')) { picked = null; route(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   if (el('[data-act="weeks"]')) { if (state.plan) weekPicker(); return; }
   const st = el('[data-start]');
   if (st) {

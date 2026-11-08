@@ -125,7 +125,10 @@ body[data-page="timer"] .tabbar, body[data-page="ride"] .tabbar { display: none;
 .row .tx span { font-size: 13px; font-weight: 500; color: var(--muted); }
 .row.past { opacity: .5; }
 .row.skipped .tx b { text-decoration: line-through; color: var(--muted); }
-.row.today { border-color: rgba(255,214,10,.4); }
+.row.today { border: 1.5px solid rgba(255,214,10,.55); background: linear-gradient(90deg, rgba(255,214,10,.08), transparent 70%), var(--s1); opacity: 1; }
+.rows .hero { margin: 2px 0; }
+.hero .topr { display: flex; align-items: center; gap: 8px; }
+.hero .collapse { width: 30px; height: 30px; transform: rotate(180deg); }
 button.row { border-color: rgba(255,255,255,.12); }
 
 /* week picker sheet */

@@ -1,6 +1,6 @@
 // Offline support. Bump VERSION on every change so phones pick up the new
 // code on their next open (the page reloads when the new worker takes over).
-const VERSION = '2026.11.08-3';
+const VERSION = '2026.11.08-4';
 const CACHE = `ride-timer-${VERSION}`;
 const SHELL = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
