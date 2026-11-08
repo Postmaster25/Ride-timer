@@ -331,7 +331,6 @@ function toggleSkip(title) {
 }
 
 // ---------- overview ----------
-let openStages = null; // stage indexes opened on the Overview (current stage by default)
 
 const patternKind = text => /volt|weight|strength|gym/i.test(text) ? '--lift' : /\brun/i.test(text) ? '--run'
   : /^\s*(free|rest|off)\b/i.test(text) || !text.trim() ? '--off' : '--bike';
@@ -364,7 +363,6 @@ function renderOverview() {
 
   const stages = Array.isArray(plan.stages) ? plan.stages : [];
   const curIdx = curWeek != null ? stages.findIndex(s => curWeek >= s.startWeek && curWeek <= s.endWeek) : -1;
-  if (!openStages) openStages = new Set(curIdx >= 0 ? [curIdx] : stages.length ? [0] : []);
 
   let progress = '';
   if (cal) {
@@ -379,17 +377,17 @@ function renderOverview() {
   const stageCards = stages.map((st, i) => {
     const h = stageHours(plan, st);
     const cur = i === curIdx;
-    const open = openStages.has(i);
+    const wk = cur ? curWeek : st.startWeek; // the week a tapped day opens
     const weeks = st.startWeek === st.endWeek ? `Wk ${st.startWeek}` : `Wk ${st.startWeek}–${st.endWeek}`;
     const dates = cal ? ` · ${fmtDate(cal.dateOf(st.startWeek, 1))} – ${fmtDate(cal.dateOf(st.endWeek, 7))}` : '';
     const texts = [1, 2, 3, 4, 5, 6, 7].map(wd => String(st.days?.[wd] ?? st.days?.[String(wd)] ?? ''));
-    const pattern = open ? `<div class="pattern">${texts.map((x, j) => `<div class="${cur && todayWd === j + 1 ? 'today' : ''}">
-        <b>${WEEKDAYS[j][0]}</b><span class="dot" style="background:var(${patternKind(x)})"></span><span>${esc(x || '–')}</span></div>`).join('')}</div>
-      <a class="open-week" href="#/week/${cur ? curWeek : st.startWeek}">Open week ${cur ? curWeek : st.startWeek}${ICON.right}</a>` : '';
-    return `<div class="card stage${cur ? ' cur' : ''}${open ? ' open' : ''}" data-stage="${i}" role="button" aria-expanded="${open}">
+    const pattern = `<div class="pattern">${texts.map((x, j) => `<button class="${cur && todayWd === j + 1 ? 'today' : ''}" data-pday="${wk}:${j + 1}" aria-label="${WEEKDAY_FULL[j]}, week ${wk}">
+        <b>${WEEKDAYS[j][0]}</b><span class="dot" style="background:var(${patternKind(x)})"></span><span>${esc(x || '–')}</span></button>`).join('')}</div>
+      <a class="open-week" href="#/week/${wk}">Open week ${wk}${ICON.right}</a>`;
+    return `<div class="card stage${cur ? ' cur' : ''}">
       <div class="h"><div class="t"><div class="n">${i + 1}</div><div><b>${esc(stripNum(st.name))}</b><span>${weeks}${dates}</span></div></div>
         <div style="display:flex;align-items:center;gap:8px"><div class="hr"><b class="num">${h.avg.toFixed(1)}<small> h/wk</small></b><span class="num">${h.min.toFixed(1)} – ${h.max.toFixed(1)}</span></div>
-        <span class="chev">${ICON.right}</span></div></div>${pattern}</div>`;
+        </div></div>${pattern}</div>`;
   }).join('');
 
   view.innerHTML = `<div class="eyebrow">${esc(plan.planName || 'Training plan')} · v${esc(plan.version)}</div><h1 class="ltitle">Overview</h1>
@@ -811,7 +809,7 @@ function renderSettings() {
     </div>
     <p class="version">Ride Timer <span id="sVersion">${esc(appVersion)}</span>${storageOk ? '' : ' · <b class="warn">Storage is blocked; settings will not be saved.</b>'}</p>`;
 
-  $('#sStart').onchange = e => { state.startDate = e.target.value; save('startDate'); openStages = null; picked = null; };
+  $('#sStart').onchange = e => { state.startDate = e.target.value; save('startDate'); picked = null; };
   const ftpIn = $('#sFtp');
   const commit = v => {
     setFtp(v);
@@ -907,7 +905,6 @@ function checkPlanInner() {
     const ok = save('plan');
     save('skips');
     pendingPlan = null;
-    openStages = null;
     picked = null;
     renderSettings();
     $('#sResult').innerHTML = ok ? `<div class="ok"><div class="r">${ICON.check}Plan imported</div><p><a href="#/">See this week</a></p></div>` : `<div class="errors"><b>The plan could not be saved on this device.</b></div>`;
@@ -964,13 +961,32 @@ document.addEventListener('click', e => {
   }
   const up = el('[data-upnext]');
   if (up) { closeRun(`#/ride/${encodeURIComponent(up.dataset.upnext)}`); return; }
-  const stage = el('[data-stage]');
-  if (stage && !el('a')) {
-    const i = +stage.dataset.stage;
-    if (openStages.has(i)) openStages.delete(i); else openStages.add(i);
-    renderOverview();
-  }
+  const pd = el('[data-pday]');
+  if (pd) { const [w, wd] = pd.dataset.pday.split(':').map(Number); openDay(w, wd); }
 });
+
+// A day tapped in a stage's week: its ride's page, or a sheet with that day's plan.
+function openDay(week, wd) {
+  const items = (state.plan.weeks.find(w => w.week === week)?.days || []).filter(d => d.weekday === wd);
+  const rides = items.filter(d => d.kind === 'ride');
+  if (rides.length === 1 && items.length === 1) { go(`#/ride/${encodeURIComponent(rides[0].title)}`); return; }
+  const cal = calendar(state.startDate);
+  const when = `${WEEKDAY_FULL[wd - 1]} · Week ${week}${cal ? ` · ${fmtDate(cal.dateOf(week, wd))}` : ''}`;
+  const rows = items.map(item => {
+    if (item.kind === 'ride') {
+      const steps = rideSteps(item, state.plan, state.ftp);
+      return `<button class="row" data-go="#/ride/${encodeURIComponent(item.title)}">${kico('ride')}<div class="tx"><b>${esc(item.name || item.title)}</b>
+        <span>${esc([item.title, hmin(totalSeconds(steps))].join(' · '))}</span></div><span class="chev">${ICON.right}</span></button>`;
+    }
+    const mins = dayMinutes(item);
+    const text = item.summary || (item.kind === 'rest' ? 'Rest' : item.kind === 'free' ? 'Free' : item.kind);
+    const sub = [{ strength: 'Strength', run: 'Run', rest: 'Rest', free: '' }[item.kind], mins ? hmin(mins * 60) : '', item.optional ? 'optional' : ''].filter(Boolean).join(' · ');
+    return `<div class="row">${kico(item.kind)}<div class="tx"><b>${esc(text)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</div></div>`;
+  });
+  openSheet(`<div class="sheethead"><b>${esc(when)}</b></div>
+    <div class="rows" style="margin-top:6px">${rows.join('') || `<div class="row">${kico('rest')}<div class="tx"><b>Nothing planned</b></div></div>`}</div>
+    <button class="ghost wide" style="margin-top:14px" data-go="#/week/${week}">Open week ${week}</button>`);
+}
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeSheet();
   if (e.code === 'Space' && run && !['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(document.activeElement.tagName)) {
