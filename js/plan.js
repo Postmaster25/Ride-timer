@@ -108,11 +108,13 @@ export function stageHours(plan, stage) {
 }
 
 // Activity counts and minutes for the whole plan, skipping optional days.
-export function planTotals(plan) {
+// keep(week, day), when given, picks which days count (such as the ones still
+// ahead on the calendar).
+export function planTotals(plan, keep = null) {
   const byKind = { ride: { count: 0, minutes: 0 }, run: { count: 0, minutes: 0 }, strength: { count: 0, minutes: 0 } };
   let count = 0, minutes = 0;
   for (const wk of plan?.weeks || []) for (const day of wk.days) {
-    if (!counted(day)) continue;
+    if (!counted(day) || (keep && !keep(wk.week, day))) continue;
     const m = dayMinutes(day);
     count++;
     minutes += m;
@@ -137,9 +139,16 @@ export function scaledStep(step, plan, ftp) {
 }
 
 // The steps as ridden: outdoor rides have no power meter, so they carry no
-// watts at all (none scaled, none shown); trainer rides scale to the FTP.
+// watts (none in cues or the description); trainer rides scale to the FTP.
+// When an outdoor step does list watts, they are kept apart as indoorLow and
+// indoorHigh, scaled to the FTP, for the screen to show in case the ride is
+// moved onto the trainer.
 export function rideSteps(day, plan, ftp) {
-  if (day.outdoor) return day.steps.map(({ wattsLow, wattsHigh, ...rest }) => rest);
+  if (day.outdoor) return day.steps.map(({ wattsLow, wattsHigh, ...rest }) => {
+    if (wattsLow == null && wattsHigh == null) return rest;
+    const sc = scaledStep({ wattsLow, wattsHigh }, plan, ftp);
+    return { ...rest, indoorLow: sc.wattsLow, indoorHigh: sc.wattsHigh };
+  });
   return day.steps.map(s => scaledStep(s, plan, ftp));
 }
 

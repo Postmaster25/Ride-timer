@@ -6,9 +6,12 @@ A phone web app that shows the weekly training plan and runs the cycling interva
 
 1. Open the site in Safari on the iPhone and add it to the home screen (Share, then Add to Home Screen).
 2. In **Settings**, set the plan start date and FTP, then import the plan JSON. You can paste it or pick a `.json` file.
-3. The **Week** view opens on the current week. Tap a ride to see its steps and copy its Strava title and description. Tap **Start** to run the timer.
+3. The **Week** view opens on the current week, with today's ride in the big card. Tap another ride (in the list or the day strip) to put it in the card, or tap the week title to jump to any week. **Details** shows the steps and copies the Strava title and description; **Start ride** runs the timer.
+4. **Overview** shows the plan's totals with what is left from today on, and each stage's hours and weekly pattern (tap a stage to open it).
 
-The plan, start date, FTP, voice setting and skip marks are stored only on the device. No training plan is committed to this repository.
+The plan, start date, FTP, the last FTP changes, voice setting and skip marks are stored only on the device. No training plan is committed to this repository. FTP changes made on the same day count as one change in the history.
+
+Outdoor rides (`"outdoor": true`) are spoken and described by heart rate and effort only. If an outdoor step also lists `wattsLow`/`wattsHigh` (at the plan's `ftpReference`), the timer and workout screens show those watts, scaled to your FTP, for days the ride moves onto the trainer. They are never spoken.
 
 ## How it works
 
@@ -20,7 +23,7 @@ The plan, start date, FTP, voice setting and skip marks are stored only on the d
 
 ## Files
 
-- `index.html`, `style.css`, `js/app.js`: the screens.
+- `index.html`, `style.css`, `js/app.js`: the screens (laid out for an iPhone 13, 390 x 844 points).
 - `js/plan.js`: plan validation, FTP scaling, calendar math and the Strava description.
 - `js/cues.js`: the voice cue rules and the list of every phrase that needs a clip.
 - `js/audio.js`: clip playback and screen wake.
