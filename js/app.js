@@ -383,9 +383,8 @@ function renderOverview() {
     const weeks = st.startWeek === st.endWeek ? `Wk ${st.startWeek}` : `Wk ${st.startWeek}–${st.endWeek}`;
     const dates = cal ? ` · ${fmtDate(cal.dateOf(st.startWeek, 1))} – ${fmtDate(cal.dateOf(st.endWeek, 7))}` : '';
     const texts = [1, 2, 3, 4, 5, 6, 7].map(wd => String(st.days?.[wd] ?? st.days?.[String(wd)] ?? ''));
-    const long = texts.some(x => x.length > 14);
-    const pattern = open ? `<div class="pattern${long ? ' list' : ''}">${texts.map((x, j) => `<div class="${cur && todayWd === j + 1 ? 'today' : ''}">
-        <b>${long ? WEEKDAYS[j] : WEEKDAYS[j][0]}</b>${long ? '' : `<span class="dot" style="background:var(${patternKind(x)})"></span>`}<span>${esc(x || '–')}</span></div>`).join('')}</div>
+    const pattern = open ? `<div class="pattern">${texts.map((x, j) => `<div class="${cur && todayWd === j + 1 ? 'today' : ''}">
+        <b>${WEEKDAYS[j][0]}</b><span class="dot" style="background:var(${patternKind(x)})"></span><span>${esc(x || '–')}</span></div>`).join('')}</div>
       <a class="open-week" href="#/week/${cur ? curWeek : st.startWeek}">Open week ${cur ? curWeek : st.startWeek}${ICON.right}</a>` : '';
     return `<div class="card stage${cur ? ' cur' : ''}${open ? ' open' : ''}" data-stage="${i}" role="button" aria-expanded="${open}">
       <div class="h"><div class="t"><div class="n">${i + 1}</div><div><b>${esc(stripNum(st.name))}</b><span>${weeks}${dates}</span></div></div>
