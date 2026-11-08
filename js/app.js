@@ -213,8 +213,8 @@ function renderWeek(weekNum) {
     return { wd, date, ymd, isToday: ymd === nowYMD, past: ymd != null && ymd < nowYMD, before: date && cal.beforeStart(date),
       items: (weekData?.days || []).filter(d => d.weekday === wd) };
   });
-  // Days stay in order. Today's ride is always open as a card; any other
-  // ride opens in place when tapped (one at a time) and closes on a second tap.
+  // Days stay in order and one ride is open as a card: today's, until another
+  // ride is tapped. That one opens in place; a second tap brings back today's.
   const openTitle = picked?.week === wk ? picked.title : null;
 
   const stage = stageOf(plan, wk);
@@ -237,7 +237,7 @@ function renderWeek(weekNum) {
     if (d.before) { rows.push(`<div class="row${cls}">${kico('rest')}${base}<div class="tx"><b>Before start</b></div></div>`); continue; }
     if (!d.items.length) { rows.push(`<div class="row${cls}">${kico('rest')}${base}<div class="tx"><b>${d.wd === 7 ? 'Free' : 'Nothing planned'}</b></div></div>`); continue; }
     for (const item of d.items) {
-      if (item.kind === 'ride' && (d.isToday || item.title === openTitle)) {
+      if (item.kind === 'ride' && (openTitle ? item.title === openTitle : d.isToday)) {
         rows.push(heroHtml({ ride: item, day: d }, !d.isToday, cal, now));
         continue;
       }
