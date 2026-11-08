@@ -194,6 +194,26 @@ test('outdoor cues name heart rate or effort, never watts, and have clips', () =
   assert.ok(say(buildCues([{ type: 'work', seconds: 600, rpe: '10' }], 'RAMP')).includes('0 10 minutes'));
 });
 
+test('outdoor steps with watts keep them only as indoor watts, scaled to the FTP', () => {
+  const ride = { ...structuredClone(OUTDOOR), steps: [{ type: 'steady', seconds: 600, wattsLow: 150, wattsHigh: 180, hrLow: 125, hrHigh: 140 }, { type: 'cooldown', seconds: 300, hrHigh: 125 }] };
+  const [a, b] = rideSteps(ride, SAMPLE, 470); // twice the reference FTP
+  assert.equal(a.wattsLow, undefined);
+  assert.equal(a.indoorLow, 300);
+  assert.equal(a.indoorHigh, 360);
+  assert.equal(b.indoorHigh, undefined);
+  assert.ok(!say(buildCues([a, b], 'O', true)).some(l => l.includes('watts')));
+  assert.ok(!/ W\b/.test(description(ride, SAMPLE, 470)));
+});
+
+test('plan totals can count only some days (what is left)', () => {
+  const all = planTotals(SAMPLE);
+  const none = planTotals(SAMPLE, () => false);
+  assert.equal(none.count, 0);
+  assert.equal(none.minutes, 0);
+  const rides = planTotals(SAMPLE, (week, day) => day.kind === 'ride');
+  assert.equal(rides.count, all.byKind.ride.count);
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try { fn(); console.log(`ok   ${name}`); } catch (e) { failed++; console.log(`FAIL ${name}\n${e.message}`); }
